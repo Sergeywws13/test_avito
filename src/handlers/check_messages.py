@@ -1,34 +1,35 @@
 from aiogram import types, Router
-from sqlalchemy import select
-from src.models.user import User
-from src.services.avito_api import get_access_token, send_message
-from src.services.message_service import fetch_and_send_messages, handle_telegram_message
-from src.database.db import async_session
+from src.services.message_service import send_message_to_avito
+
 
 check_router = Router()
 
-@check_router.message()
-async def handle_incoming_message(message: types.Message):
+@check_router.callback_query()
+async def handle_reply(callback_query):
     """
-    Обработчик для всех входящих сообщений от менеджера.
+    Обработчик для ответа на сообщение.
     """
-    async with async_session() as session:
-        user = await session.execute(select(User).where(User.user_id == message.from_user.id))
-        user = user.scalar_one_or_none()
-        if user:
-            access_token = await get_access_token(user.client_id, user.client_secret)
-            if access_token:
-                # Получаем chat_id, на который нужно отправить ответ
-                chat_id = message.chat.id  # Или используйте другой способ получения chat_id
+    data = callback_query.data
+    if data.startswith("reply_"):
+        message_id = data.split("_")[1]
+        await callback_query.answer("Введите ваш ответ:")
+        
+        # Сохраняем состояние, чтобы ожидать ответ
+        await callback_query.message.answer("Введите ваш ответ:")
+        await callback_query.message.bot.set_state("waiting_for_reply", message_id)
 
-                # Отправляем ответ в API Авито
-                response = await send_message(access_token, user.user_id, chat_id, message.text)
-                if response:
-                    await message.reply("Ваш ответ отправлен.")
-                else:
-                    await message.reply("Произошла ошибка при отправке ответа.")
-            else:
-                await message.answer("Не удалось получить access token.")
-        else:
-            await message.answer("Пользователь не найден в базе данных.")
+@check_router.message()
+async def handle_incoming_reply(message: types.Message):
+    """
+    Обработчик для входящих ответов на сообщения.
+    """
+    state = message.bot.get_state()
+    if state == "waiting_for_reply":
+        message_id = state.get("message_id")
+        
+        # Здесь вы можете отправить ответ через API Avito
+        await send_message_to_avito(message_id, message.text)
+
+        await message.reply("Ваш ответ отправлен.")
+        await message.bot.clear_state()
             
