@@ -12,3 +12,5 @@ class User(Base):
     client_secret = Column(String, nullable=False)
 
     chats = relationship("Chat", back_populates="user") 
+
+    

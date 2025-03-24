@@ -1,7 +1,6 @@
 import asyncio
 from aiogram import Bot
 from sqlalchemy import select
-from src.keyboards import generate_reply_markup
 from src.models.user import User
 from src.services.avito_api import get_access_token, get_chats, get_messages, get_self_info, mark_chat_as_read, send_message
 from src.database.db import async_session
@@ -11,31 +10,28 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-import logging
-from aiogram import Bot
-from sqlalchemy import select
-from src.keyboards import generate_reply_markup
-from src.services.avito_api import get_access_token, get_chats, get_messages, get_self_info, mark_chat_as_read
-from src.database.db import async_session
-
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def fetch_and_send_messages(bot: Bot, access_token, user_id):
-    """
-    Получает непрочитанные сообщения из всех непрочитанных чатов и отправляет их в Telegram.
-    """
+    logger.info("Начинаем обработку сообщений...")
+    
+    # Получаем информацию о текущем пользователе
     self_info = await get_self_info(access_token)
     user_id = self_info["id"]
+    
+    # Получаем список чатов
     chats = await get_chats(access_token, user_id)
+    logger.info(f"Полученные чаты: {chats}")
     
     for chat in chats:
         chat_id = chat["id"]  # Используем chat_id для получения сообщений
         messages = await get_messages(access_token, user_id, chat_id)
+        logger.info(f"Полученные сообщения из чата {chat_id}: {messages}")
         
         for message in messages:
-            logger.info(f"Получено сообщение: {message}")
+            logger.info(f"Обработка сообщения: {message}")
             
             # Форматируем сообщение для отправки в Telegram
             message_text = message["content"]["text"]
@@ -52,15 +48,15 @@ async def fetch_and_send_messages(bot: Bot, access_token, user_id):
                 "Ответьте на это сообщение, чтобы ответить пользователю."
             )
             
-            # Логируем chat_id перед отправкой
-            logger.info(f"Генерация клавиатуры для message_id: {message_id}")
-            reply_markup = generate_reply_markup(message_id)
-            
-            # Отправляем сообщение в чат, используя chat_id
+            # Отправляем сообщение в Telegram
             try:
-                await bot.send_message(user_id, formatted_message, reply_markup=reply_markup)
+                await bot.send_message(user_id, formatted_message)
+                logger.info(f"Сообщение отправлено пользователю {user_id}.")
             except Exception as e:
                 logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+            
+            # Добавляем задержку между отправкой сообщений
+            await asyncio.sleep(1)  # Задержка в 1 секунду
 
 
 async def send_message_to_avito(message_id, reply_text):

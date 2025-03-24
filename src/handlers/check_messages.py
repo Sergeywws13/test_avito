@@ -18,18 +18,18 @@ async def handle_reply(callback_query):
         await callback_query.message.answer("Введите ваш ответ:")
         await callback_query.message.bot.set_state("waiting_for_reply", message_id)
 
+
 @check_router.message()
 async def handle_incoming_reply(message: types.Message):
     """
     Обработчик для входящих ответов на сообщения.
     """
-    state = message.bot.get_state()
-    if state == "waiting_for_reply":
-        message_id = state.get("message_id")
-        
-        # Здесь вы можете отправить ответ через API Avito
-        await send_message_to_avito(message_id, message.text)
-
-        await message.reply("Ваш ответ отправлен.")
-        await message.bot.clear_state()
+    # Получаем ID сообщения, на которое пользователь ответил
+    message_id = message.reply_to_message.id
+    
+    # Отправляем ответ на сообщение через API Avito
+    await send_message_to_avito(message_id, message.text)
+    
+    # Отвечаем пользователю, что его ответ отправлен
+    await message.reply("Ваш ответ отправлен.")
             

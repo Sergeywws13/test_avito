@@ -1,11 +1,12 @@
 import json
 import logging
-import aiohttp  # Импортируем aiohttp для асинхронных запросов
+import aiohttp
 from datetime import date, timedelta
 
 # Настройка логирования
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 async def get_access_token(client_id, client_secret):
     """
@@ -34,6 +35,7 @@ async def get_access_token(client_id, client_secret):
             logger.error(f"Ошибка при запросе access_token: {e}")
             return False
 
+
 async def get_self_info(access_token):
     """
     Получает информацию о текущем аккаунте через API Авито.
@@ -51,10 +53,9 @@ async def get_self_info(access_token):
             logger.error(f"Ошибка при запросе информации о аккаунте: {e}")
             return None
 
+
 async def get_chats(access_token, user_id):
-    """
-    Получает список чатов через API Авито.
-    """
+    logger.info(f"Запрос на получение списка чатов: user_id={user_id}")
     url = f"https://api.avito.ru/messenger/v2/accounts/{user_id}/chats"
     headers = {
         "Authorization": f"Bearer {access_token}"
@@ -62,13 +63,15 @@ async def get_chats(access_token, user_id):
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(url, headers=headers) as response:
+                logger.info(f"Ответ на запрос: {response.status}")
                 response.raise_for_status()
-                # Ожидаем результат вызова json()
                 data = await response.json()
+                logger.info(f"Данные: {data}")
                 return data.get("chats", [])
         except Exception as e:
-            logger.error(f"Ошибка при получении чатов: {e}")
+            logger.error(f"Ошибка при получении списка чатов: {e}")
             return []
+
 
 async def get_messages(access_token, user_id, chat_id):
     """
@@ -88,6 +91,7 @@ async def get_messages(access_token, user_id, chat_id):
         except Exception as e:
             logger.error(f"Ошибка при получении сообщений: {e}")
             return []
+
 
 async def mark_chat_as_read(access_token, user_id, chat_id):
     """
@@ -130,3 +134,4 @@ async def send_message(access_token, user_id, chat_id, message_text):
         except Exception as e:
             logger.error(f"Ошибка при отправке сообщения: {e}")
             return None
+        
