@@ -1,0 +1,40 @@
+from aiogram import Router
+from aiogram.filters import Command
+from aiogram.types import Message
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from src.database.db import async_session
+from src.services.user_service import get_or_create_user
+
+start_router = Router()
+
+class AuthStates(StatesGroup):
+    waiting_for_client_id = State()
+    waiting_for_client_secret = State()
+
+@start_router.message(Command("start"))
+async def start_command(message: Message, state: FSMContext):
+    await message.answer("Введите ваш client_id:")
+    await state.set_state(AuthStates.waiting_for_client_id)
+
+@start_router.message(AuthStates.waiting_for_client_id)
+async def process_client_id(message: Message, state: FSMContext):
+    await state.update_data(client_id=message.text)
+    await message.answer("Введите ваш client_secret:")
+    await state.set_state(AuthStates.waiting_for_client_secret)
+
+@start_router.message(AuthStates.waiting_for_client_secret)
+async def process_client_secret(message: Message, state: FSMContext):
+    data = await state.get_data()
+    client_id = data.get("client_id")
+    client_secret = message.text
+
+    async with async_session() as session:
+        # Передаем client_id и client_secret при создании пользователя
+        user = await get_or_create_user(session, message.from_user.id, client_id, client_secret)
+        await session.commit()
+
+    await message.answer("Данные успешно сохранены!")
+    await state.clear()
+
+    
