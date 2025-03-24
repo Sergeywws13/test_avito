@@ -11,7 +11,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# src\services\message_service.py
+import logging
+from aiogram import Bot
+from sqlalchemy import select
+from src.keyboards import generate_reply_markup
+from src.services.avito_api import get_access_token, get_chats, get_messages, get_self_info, mark_chat_as_read
+from src.database.db import async_session
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 async def fetch_and_send_messages(bot: Bot, access_token, user_id):
     """
     Получает непрочитанные сообщения из всех непрочитанных чатов и отправляет их в Telegram.
@@ -21,7 +31,7 @@ async def fetch_and_send_messages(bot: Bot, access_token, user_id):
     chats = await get_chats(access_token, user_id)
     
     for chat in chats:
-        chat_id = chat["id"]
+        chat_id = chat["id"]  # Используем chat_id для получения сообщений
         messages = await get_messages(access_token, user_id, chat_id)
         
         for message in messages:
@@ -43,18 +53,14 @@ async def fetch_and_send_messages(bot: Bot, access_token, user_id):
             )
             
             # Логируем chat_id перед отправкой
-            logger.info(f"Отправка сообщения в чат с ID: {user_id}")
+            logger.info(f"Генерация клавиатуры для message_id: {message_id}")
+            reply_markup = generate_reply_markup(message_id)
             
-            if message["type"] == "system":
-                await bot.send_message(user_id, message_text)
-            else:
-                reply_markup = generate_reply_markup(message_id)
-                if reply_markup.inline_keyboard:
-                    await bot.send_message(user_id, formatted_message, reply_markup=reply_markup)
-                else:
-                    await bot.send_message(user_id, formatted_message)
-            
-            await mark_chat_as_read(access_token, user_id, chat_id)  # Помечаем чат как прочитанный
+            # Отправляем сообщение в чат, используя chat_id
+            try:
+                await bot.send_message(user_id, formatted_message, reply_markup=reply_markup)
+            except Exception as e:
+                logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
 
 
 async def send_message_to_avito(message_id, reply_text):

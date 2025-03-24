@@ -4,7 +4,7 @@ def generate_reply_markup(message_id):
     """
     Генерирует кнопки для ответа на сообщение.
     """
-    keyboard = InlineKeyboardMarkup()
-    reply_button = InlineKeyboardButton("Ответить", callback_data=f"reply_{message_id}")
-    keyboard.add(reply_button)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Ответить", callback_data=f"reply_{message_id}")]
+    ])
     return keyboard
