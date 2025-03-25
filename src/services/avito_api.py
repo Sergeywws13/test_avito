@@ -1,7 +1,10 @@
-import json
 import logging
 import aiohttp
-from datetime import date, timedelta
+
+from sqlalchemy import select
+from src.database.db import async_session
+
+from src.models.user import User
 
 # Настройка логирования
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -55,42 +58,27 @@ async def get_self_info(access_token):
 
 
 async def get_chats(access_token, user_id):
-    logger.info(f"Запрос на получение списка чатов: user_id={user_id}")
     url = f"https://api.avito.ru/messenger/v2/accounts/{user_id}/chats"
     headers = {
         "Authorization": f"Bearer {access_token}"
     }
+    params = {
+        "unread_only": "true",  # Получить только непрочитанные чаты
+        "chat_types": "u2i,u2u"  # Включить чаты от пользователей и по объявлениям
+    }
     async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url, headers=headers) as response:
-                logger.info(f"Ответ на запрос: {response.status}")
-                response.raise_for_status()
-                data = await response.json()
-                logger.info(f"Данные: {data}")
-                return data.get("chats", [])
-        except Exception as e:
-            logger.error(f"Ошибка при получении списка чатов: {e}")
-            return []
+        async with session.get(url, headers=headers, params=params) as response:
+            return await response.json()
 
 
-async def get_messages(access_token, user_id, chat_id):
-    """
-    Получает сообщения из чата через API Авито.
-    """
+async def get_messages_from_chat(access_token, user_id, chat_id):
     url = f"https://api.avito.ru/messenger/v3/accounts/{user_id}/chats/{chat_id}/messages/"
     headers = {
         "Authorization": f"Bearer {access_token}"
     }
     async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url, headers=headers) as response:
-                response.raise_for_status()
-                # Ожидаем результат вызова json()
-                data = await response.json()
-                return data.get("messages", [])
-        except Exception as e:
-            logger.error(f"Ошибка при получении сообщений: {e}")
-            return []
+        async with session.get(url, headers=headers) as response:
+            return await response.json()
 
 
 async def mark_chat_as_read(access_token, user_id, chat_id):
@@ -110,21 +98,18 @@ async def mark_chat_as_read(access_token, user_id, chat_id):
             logger.error(f"Ошибка при пометке чата как прочитанного: {e}")
             return None
         
-
-async def send_message(access_token, user_id, chat_id, message_text):
+async def send_reply_to_message(access_token, user_id, chat_id, reply_text):
     """
-    Отправляет сообщение через API Авито.
+    Отправляет ответ на сообщение через API Avito.
     """
-    url = f"https://api.avito.ru/messenger/v1/accounts/{user_id}/chats/{chat_id}/messages"
+    url = f"https://api.avito.ru/messenger/v3/accounts/{user_id}/chats/{chat_id}/messages/"
     headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {access_token}"
     }
     data = {
-        "message": {
-            "text": message_text
-        },
-        "type": "text"
+        "content": {
+            "text": reply_text
+        }
     }
     async with aiohttp.ClientSession() as session:
         try:
@@ -132,6 +117,36 @@ async def send_message(access_token, user_id, chat_id, message_text):
                 response.raise_for_status()
                 return await response.json()
         except Exception as e:
-            logger.error(f"Ошибка при отправке сообщения: {e}")
+            logger.error(f"Ошибка при отправке ответа в Avito: {e}")
             return None
+
+
+async def send_message_to_avito(message_id, reply_text):
+    """
+    Отправляет ответ на сообщение через API Avito.
+    """
+    # Получаем информацию о сообщении, на которое мы отвечаем
+    async with async_session() as session:
+        # Здесь вам нужно будет получить пользователя, чтобы использовать его client_id и client_secret
+        user = await session.execute(select(User).where(User.user_id == message_id))
+        user = user.scalar_one_or_none()
+
+        if user:
+            # Получаем access_token для отправки сообщения
+            access_token = await get_access_token(user.client_id, user.client_secret)
+            if access_token:
+                # Здесь вам нужно будет использовать API Avito для отправки ответа
+                # Используем функцию send_message, передавая необходимые параметры
+                chat_id = message_id  # ID чата, на который мы отвечаем
+                response = await send_reply_to_message(access_token, user.user_id, chat_id, reply_text)
+
+                if response:
+                    logger.info("Ответ успешно отправлен в Avito.")
+                else:
+                    logger.error("Не удалось отправить ответ в Avito.")
+            else:
+                logger.error("Не удалось получить access token.")
+        else:
+            logger.error("Пользователь не найден в базе данных.")
+        
         
