@@ -15,6 +15,7 @@ class AuthStates(StatesGroup):
     waiting_for_client_id = State()
     waiting_for_client_secret = State()
     waiting_for_chat_id = State()  # Новое состояние для ожидания ID чата
+    waiting_for_reply = State() 
 
 @start_router.message(Command("start"))
 async def start_command(message: Message, state: FSMContext):
@@ -56,14 +57,4 @@ async def save_chat_id(message: Message, state: FSMContext):
     await message.answer(f"Ваш ID чата сохранен: {chat_id}")
     await state.clear()  # Очистка состояния после сохранения ID чата
 
-@start_router.message()
-async def handle_unexpected_message(message: Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state == AuthStates.waiting_for_client_id.state:
-        await message.answer("Пожалуйста, введите ваш client_id.")
-    elif current_state == AuthStates.waiting_for_client_secret.state:
-        await message.answer("Пожалуйста, введите ваш client_secret.")
-    elif current_state == AuthStates.waiting_for_chat_id.state:
-        await message.answer("Пожалуйста, отправьте любое сообщение, чтобы сохранить ID чата.")
-    else:
-        await message.answer("Неизвестная команда. Пожалуйста, используйте /start для начала.")
+
