@@ -6,15 +6,12 @@ from src.services.avito_api import get_access_token, get_chats, get_messages_fro
 from src.database.db import async_session
 import logging
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-async def fetch_and_send_messages(bot: Bot, access_token, user_id):
+async def fetch_and_send_messages(bot: Bot, access_token, user_id, telegram_chat_id):
     logger.info("Начинаем обработку сообщений...")
     
     # Получаем информацию о текущем пользователе
@@ -48,9 +45,6 @@ async def fetch_and_send_messages(bot: Bot, access_token, user_id):
                 "Ответьте на это сообщение, чтобы ответить пользователю."
             )
             
-            # Получаем ID чата, в котором мы общаемся с ботом
-            telegram_chat_id = user_id  # ID чата, в котором мы общаемся с ботом
-
             # Отправляем сообщение в Telegram
             try:
                 await bot.send_message(telegram_chat_id, formatted_message)
@@ -103,6 +97,6 @@ async def periodic_message_check(bot: Bot):
 
             for user in users:
                 access_token = await get_access_token(user.client_id, user.client_secret)
-                if access_token:
-                    await fetch_and_send_messages(bot, access_token, user.user_id)  # Используем user.user_id
+                if access_token and user.telegram_chat_id:
+                    await fetch_and_send_messages(bot, access_token, user.user_id, user.telegram_chat_id)
         await asyncio.sleep(60)

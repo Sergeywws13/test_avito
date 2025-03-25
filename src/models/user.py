@@ -10,6 +10,7 @@ class User(Base):
     user_id = Column(Integer, unique=True, nullable=False)
     client_id = Column(String, nullable=False)
     client_secret = Column(String, nullable=False)
+    telegram_chat_id = Column(Integer, nullable=True)
 
     chats = relationship("Chat", back_populates="user") 
 
