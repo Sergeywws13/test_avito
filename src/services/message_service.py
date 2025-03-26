@@ -2,7 +2,7 @@ import asyncio
 from aiogram import Bot
 from sqlalchemy import select
 from src.models.user import User
-from src.services.avito_api import get_access_token, get_chats, get_messages_from_chat, get_self_info, send_reply_to_message
+from src.services.avito_api import get_access_token, get_chats, get_messages_from_chat, get_self_info
 from src.database.db import async_session
 import logging
 

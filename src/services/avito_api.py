@@ -98,18 +98,16 @@ async def mark_chat_as_read(access_token, user_id, chat_id):
             logger.error(f"Ошибка при пометке чата как прочитанного: {e}")
             return None
         
-async def send_reply_to_message(access_token, user_id, chat_id, reply_text):
-    """
-    Отправляет ответ на сообщение через API Avito.
-    """
-    url = f"https://api.avito.ru/messenger/v3/accounts/{user_id}/chats/{chat_id}/messages/"
+async def send_message(access_token, avito_user_id, avito_chat_id, message_text):
+    url = f"https://api.avito.ru/messenger/v1/accounts/{avito_user_id}/chats/{avito_chat_id}/messages"
     headers = {
         "Authorization": f"Bearer {access_token}"
     }
     data = {
-        "content": {
-            "text": reply_text
-        }
+        "message": {
+            "text": message_text
+        },
+        "type": "text"
     }
     async with aiohttp.ClientSession() as session:
         try:
@@ -117,7 +115,7 @@ async def send_reply_to_message(access_token, user_id, chat_id, reply_text):
                 response.raise_for_status()
                 return await response.json()
         except Exception as e:
-            logger.error(f"Ошибка при отправке ответа в Avito: {e}")
+            logger.error(f"Ошибка при отправке сообщения: {e}")
             return None
 
 
@@ -138,7 +136,7 @@ async def send_message_to_avito(message_id, reply_text):
                 # Здесь вам нужно будет использовать API Avito для отправки ответа
                 # Используем функцию send_message, передавая необходимые параметры
                 chat_id = message_id  # ID чата, на который мы отвечаем
-                response = await send_reply_to_message(access_token, user.user_id, chat_id, reply_text)
+                response = await send_message(access_token, user.user_id, chat_id, reply_text)
 
                 if response:
                     logger.info("Ответ успешно отправлен в Avito.")
