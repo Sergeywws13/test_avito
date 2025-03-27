@@ -4,6 +4,7 @@ from config import TELEGRAM_BOT_TOKEN
 import logging
 from src.services.message_service import periodic_message_check
 from src.database.db import engine
+from src.handlers.register import register_router
 from src.handlers.start import start_router
 from src.handlers.check_messages import check_router
 from src.models.base import Base
@@ -19,12 +20,13 @@ async def main():
         await conn.run_sync(Base.metadata.create_all)
 
     dp.include_router(start_router)
+    dp.include_router(register_router)
     dp.include_router(check_router)
 
     # Запускаем периодическую проверку сообщений
     asyncio.create_task(periodic_message_check(bot))
 
-    await dp.start_polling(bot)    
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())

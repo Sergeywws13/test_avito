@@ -57,13 +57,12 @@ async def get_self_info(access_token):
             return None
 
 
-async def get_chats(access_token, user_id):
+async def get_chats(access_token, user_id, unread_only=False):
     url = f"https://api.avito.ru/messenger/v2/accounts/{user_id}/chats"
     headers = {
         "Authorization": f"Bearer {access_token}"
     }
     params = {
-        "unread_only": "true",  # Получить только непрочитанные чаты
         "chat_types": "u2i,u2u"  # Включить чаты от пользователей и по объявлениям
     }
     async with aiohttp.ClientSession() as session:
@@ -76,6 +75,7 @@ async def get_messages_from_chat(access_token, user_id, chat_id):
     headers = {
         "Authorization": f"Bearer {access_token}"
     }
+
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=headers) as response:
             return await response.json()
@@ -98,6 +98,7 @@ async def mark_chat_as_read(access_token, user_id, chat_id):
             logger.error(f"Ошибка при пометке чата как прочитанного: {e}")
             return None
         
+
 async def send_message(access_token, avito_user_id, avito_chat_id, message_text):
     url = f"https://api.avito.ru/messenger/v1/accounts/{avito_user_id}/chats/{avito_chat_id}/messages"
     headers = {
@@ -147,4 +148,15 @@ async def send_message_to_avito(message_id, reply_text):
         else:
             logger.error("Пользователь не найден в базе данных.")
         
-        
+
+async def get_user_info(access_token, user_id):
+    url = f"https://api.avito.ru/core/v1/accounts/{user_id}"
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as response:
+            if response.status == 200:
+                return await response.json()
+            else:
+                return None

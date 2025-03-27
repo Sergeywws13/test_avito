@@ -2,8 +2,9 @@ import asyncio
 from aiogram import Bot
 from sqlalchemy import select
 from src.models.user import User
-from src.services.avito_api import get_access_token, get_chats, get_messages_from_chat, get_self_info
+from src.services.avito_api import get_access_token, get_chats, get_messages_from_chat, get_self_info, get_user_info, mark_chat_as_read, send_message
 from src.database.db import async_session
+from datetime import datetime
 import logging
 
 
@@ -19,7 +20,7 @@ async def fetch_and_send_messages(bot: Bot, access_token, user_id, telegram_chat
     user_id = self_info["id"]
     
     # Получаем список чатов
-    chats = await get_chats(access_token, user_id)
+    chats = await get_chats(access_token, user_id, unread_only=True)
     logger.info(f"Полученные чаты: {chats}")
     
     for chat in chats["chats"]:
@@ -27,33 +28,38 @@ async def fetch_and_send_messages(bot: Bot, access_token, user_id, telegram_chat
         messages = await get_messages_from_chat(access_token, user_id, chat_id)
         logger.info(f"Полученные сообщения из чата {chat_id}: {messages}")
         
-        for message in messages["messages"]:
-            logger.info(f"Обработка сообщения: {message}")
-            
-            # Форматируем сообщение для отправки в Telegram
-            message_text = message["content"]["text"]
-            sender_id = message["author_id"]  # ID отправителя
-            message_id = message["id"]  # ID сообщения
-            created_time = message["created"]  # Время создания сообщения
-            
-            # Форматируем сообщение с дополнительной информацией
-            formatted_message = (
-                f"**Новое сообщение от пользователя {sender_id}:**\n\n"
-                f"**Текст:** {message_text}\n"
-                f"**ID сообщения:** {message_id}\n"
-                f"**Время создания:** {created_time}\n\n"
-                "Ответьте на это сообщение, чтобы ответить пользователю."
-            )
-            
-            # Отправляем сообщение в Telegram
-            try:
-                await bot.send_message(telegram_chat_id, formatted_message)
-                logger.info(f"Сообщение отправлено в чат {telegram_chat_id}.")
-            except Exception as e:
-                logger.error(f"Ошибка при отправке сообщения в чат {telegram_chat_id}: {e}")
-            
-            # Добавляем задержку между отправкой сообщений
-            await asyncio.sleep(1)  # Задержка в 1 секунду
+        if messages["messages"]:  # Проверяем, есть ли непрочитанные сообщения
+            last_message = next((message for message in reversed(messages["messages"]) if not message["isRead"]), None)
+            if last_message:
+                logger.info(f"Обработка сообщения: {last_message}")
+                
+                # Получаем информацию о пользователе
+                sender_id = last_message["author_id"]
+                sender_name = next((user["name"] for user in chat["users"] if user["id"] == sender_id), "Неизвестный пользователь")
+                
+                # Форматируем сообщение для отправки в Telegram
+                message_text = last_message["content"]["text"]
+                message_id = last_message["id"]  # ID сообщения
+                created_time = last_message["created"]  # Время создания сообщения
+                
+                # Форматируем сообщение с дополнительной информацией
+                formatted_message = (
+                    f"📨 Новое сообщение от {sender_name} 📨\n\n"
+                    f"📝 Текст сообщения: {message_text}\n\n"
+                    f"📊 ID сообщения: {message_id}\n\n"
+                    f"🕰️ Время создания: {datetime.fromtimestamp(created_time).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                )
+                
+                # Отправляем сообщение в Telegram
+                try:
+                    await bot.send_message(telegram_chat_id, formatted_message)
+                    logger.info(f"Сообщение отправлено в чат {telegram_chat_id}.")
+                except Exception as e:
+                    logger.error(f"Ошибка при отправке сообщения в чат {telegram_chat_id}: {e}")
+                
+                # Помечаем сообщение как прочитанное
+                await mark_chat_as_read(access_token, user_id, chat_id)
+                break
 
 
 async def send_message_to_avito(message_id, reply_text):
@@ -73,7 +79,7 @@ async def send_message_to_avito(message_id, reply_text):
                 # Здесь вам нужно будет использовать API Avito для отправки ответа
                 # Используем функцию send_message, передавая необходимые параметры
                 chat_id = message_id  # ID чата, на который мы отвечаем
-                response = await send_reply_to_message(access_token, user.user_id, chat_id, reply_text)
+                response = await send_message(access_token, user.user_id, chat_id, reply_text)
 
                 if response:
                     logger.info("Ответ успешно отправлен в Avito.")
@@ -99,4 +105,4 @@ async def periodic_message_check(bot: Bot):
                 access_token = await get_access_token(user.client_id, user.client_secret)
                 if access_token and user.telegram_chat_id:
                     await fetch_and_send_messages(bot, access_token, user.user_id, user.telegram_chat_id)
-        await asyncio.sleep(60)
+        await asyncio.sleep(1)
