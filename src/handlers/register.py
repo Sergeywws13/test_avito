@@ -4,6 +4,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import select
+from src.handlers.start import delete_account
 from src.models.user import User
 from src.database.db import async_session
 from src.services.user_service import get_or_create_user
@@ -28,6 +29,8 @@ async def start_register(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         await callback.message.answer("Введите ваш client_id:")
         await state.set_state(AuthStates.waiting_for_client_id)
+    elif callback.data == "delete_account":
+        await delete_account(callback.message)
 
 @register_router.message(AuthStates.waiting_for_client_id)
 async def process_client_id(message: Message, state: FSMContext):
@@ -43,25 +46,14 @@ async def process_client_secret(message: Message, state: FSMContext):
 
     async with async_session() as session:
         user = await get_or_create_user(session, message.from_user.id, client_id, client_secret)
+        user.telegram_chat_id = message.chat.id  # Сохраняем chat_id в базе данных
         await session.commit()
 
         # Получаем access_token и сохраняем его в состоянии
         access_token = await get_access_token(client_id, client_secret)
         await state.update_data(access_token=access_token, user_id=user.user_id)
 
-    await message.answer("Данные успешно сохранены! Теперь вы можете отправить сообщение, чтобы сохранить ID чата.")
-    await state.set_state(AuthStates.waiting_for_chat_id)  # Переход к ожиданию ID чата
-
-@register_router.message(AuthStates.waiting_for_chat_id)
-async def save_chat_id(message: Message, state: FSMContext):
-    chat_id = message.chat.id
-    async with async_session() as session:
-        user = await session.execute(select(User).where(User.user_id == message.from_user.id))
-        user = user.scalar_one_or_none()
-        if user:
-            user.telegram_chat_id = chat_id
-            await session.commit()
-    await message.answer(f"Ваш ID чата сохранен: {chat_id}")
-    await state.clear()  # Очистка состояния после сохранения ID чата
+    await message.answer("Данные успешно сохранены!")
+    await state.clear()
 
 

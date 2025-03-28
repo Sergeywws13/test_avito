@@ -46,8 +46,10 @@ async def fetch_and_send_messages(bot: Bot, access_token, user_id, telegram_chat
                 formatted_message = (
                     f"📨 Новое сообщение от {sender_name} 📨\n\n"
                     f"📝 Текст сообщения: {message_text}\n\n"
+                    f"_______________________________________\n\n"
                     f"📊 ID сообщения: {message_id}\n\n"
                     f"🕰️ Время создания: {datetime.fromtimestamp(created_time).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                    f"👉 Перейдите [по ссылке]({chat['users'][0]['public_user_profile']['url']}) к профилю отправителя"
                 )
                 
                 # Отправляем сообщение в Telegram
