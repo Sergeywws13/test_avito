@@ -1,6 +1,6 @@
 import logging
 import aiohttp
-
+from datetime import datetime, timedelta
 from sqlalchemy import select
 from src.database.db import async_session
 
@@ -11,32 +11,50 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 
+access_token_cache = {}
+
 async def get_access_token(client_id, client_secret):
-    """
-    Получает access_token от API Avito.
-    """
+    cache_key = (client_id, client_secret)
+    cached = access_token_cache.get(cache_key)
+    
+    if cached and datetime.now() < cached['expires']:
+        logger.info(f"Используем кэшированный токен: {cached['token'][:10]}...")
+        return cached['token']
+
     url = "https://api.avito.ru/token/"
     data = {
         "grant_type": "client_credentials",
         "client_id": client_id,
         "client_secret": client_secret
     }
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.post(url, headers=headers, data=data) as response:
-                response.raise_for_status()
-                data = await response.json()
-                if data.get("access_token"):
-                    return data['access_token']
-                else:
-                    logger.error("Access token не найден в ответе")
-                    return False
-        except Exception as e:
-            logger.error(f"Ошибка при запросе access_token: {e}")
-            return False
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, data=data) as response:
+                logger.info(f"Статус запроса токена: {response.status}")
+                response_data = await response.json()
+                logger.info(f"Ответ Avito: {response_data}")
+
+                if response.status != 200:
+                    error_msg = response_data.get("error", "Неизвестная ошибка")
+                    raise Exception(f"Ошибка API: {error_msg}")
+
+                access_token = response_data.get('access_token')
+                expires_in = response_data.get('expires_in', 3600)
+                
+                if access_token:
+                    access_token_cache[cache_key] = {
+                        'token': access_token,
+                        'expires': datetime.now() + timedelta(seconds=expires_in)
+                    }
+                    logger.info(f"Новый токен получен: {access_token[:10]}...")
+                    return access_token
+                
+                logger.error("Access token не найден в ответе")
+                return None
+    except Exception as e:
+        logger.error(f"Ошибка запроса токена: {str(e)}")
+        return None
 
 
 async def get_self_info(access_token):

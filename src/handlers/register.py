@@ -1,16 +1,18 @@
+import logging
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from sqlalchemy import select
 from src.handlers.start import delete_account
-from src.models.user import User
 from src.database.db import async_session
 from src.services.user_service import get_or_create_user
-from src.services.avito_api import get_access_token
+from src.services.avito_api import get_access_token, get_self_info
 
 register_router = Router()
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class AuthStates(StatesGroup):
     waiting_for_client_id = State()
@@ -46,14 +48,21 @@ async def process_client_secret(message: Message, state: FSMContext):
 
     async with async_session() as session:
         user = await get_or_create_user(session, message.from_user.id, client_id, client_secret)
-        user.telegram_chat_id = message.chat.id  # Сохраняем chat_id в базе данных
+        access_token = await get_access_token(client_id, client_secret)
+        if access_token:
+            self_info = await get_self_info(access_token)
+            if self_info and "id" in self_info:
+                user.avito_user_id = str(self_info["id"])
+                logger.info(f"Сохранен avito_user_id: {user.avito_user_id}")
+            else:
+                await message.answer("❌ Не удалось получить ID пользователя Avito")
+                return
+        else:
+            await message.answer("❌ Не удалось получить токен доступа")
+            return
+        user.telegram_chat_id = message.chat.id
         await session.commit()
 
-        # Получаем access_token и сохраняем его в состоянии
-        access_token = await get_access_token(client_id, client_secret)
-        await state.update_data(access_token=access_token, user_id=user.user_id)
-
-    await message.answer("Данные успешно сохранены!")
+    await message.answer("✅ Данные успешно сохранены!")
     await state.clear()
-
-
+    

@@ -11,7 +11,8 @@ class User(Base):
     client_id = Column(String, nullable=False)
     client_secret = Column(String, nullable=False)
     telegram_chat_id = Column(Integer, nullable=True)
+    avito_user_id = Column(String, nullable=True)
 
-    chats = relationship("Chat", back_populates="user") 
+    chats = relationship("Chat", back_populates="user")
 
     

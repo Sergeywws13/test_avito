@@ -1,6 +1,8 @@
+import logging
 from aiogram import types, Router
 from sqlalchemy import select
-from src.services.avito_api import get_access_token, get_chats, get_self_info, send_message
+from src.models.message_link import MessageLink
+from src.services.avito_api import get_access_token, get_chats, get_self_info, send_message, send_message_to_avito
 from src.database.db import async_session
 from src.models.user import User
 
@@ -26,39 +28,39 @@ async def handle_incoming_message(message: types.Message):
 
 
 async def handle_incoming_reply(message: types.Message):
-    # Получаем данные о сообщении, на которое нужно ответить
-    user_id = message.from_user.id
-    message_id = message.reply_to_message.message_id  # ID сообщения, на которое отвечаем
-    reply_to_message_id = message.reply_to_message.message_id  # ID сообщения, на которое отвечаем
+    if not message.reply_to_message:
+        await message.reply("❌ Это сообщение не является ответом")
+        return
 
-    # Получаем информацию о пользователе из базы данных
-    async with async_session() as session:
-        user = await session.execute(select(User).where(User.user_id == user_id))
-        user = user.scalar_one_or_none()
+    reply_to_message_id = message.reply_to_message.message_id
+    reply_text = message.text
 
-    if user:
-        # Получаем access_token для отправки сообщения
-        access_token = await get_access_token(user.client_id, user.client_secret)
+    try:
+        response = await send_message_to_avito(reply_to_message_id, reply_text)
+        if response and 'message_id' in response:
+            # Сохраняем информацию о новом сообщении в базе данных
+            async with async_session() as session:
+                message_link = await session.execute(
+                    select(MessageLink).where(MessageLink.telegram_message_id == reply_to_message_id)
+                )
+                message_link = message_link.scalar_one_or_none()
 
-        if access_token:
-            # Получаем информацию о текущем пользователе
-            self_info = await get_self_info(access_token)
-            avito_user_id = self_info["id"]
+                if message_link:
+                    user = await session.get(User, message_link.user_id)
+                    new_link = MessageLink(
+                        telegram_message_id=message.message_id,
+                        avito_chat_id=message_link.avito_chat_id,
+                        avito_user_id=user.avito_user_id,  # Сохраняем ваш avito_user_id
+                        user_id=user.id,
+                        avito_message_id=response['message_id']
+                    )
+                    session.add(new_link)
+                    await session.commit()
 
-            # Получаем список чатов
-            chats = await get_chats(access_token, avito_user_id)
-            for chat in chats["chats"]:
-                avito_chat_id = chat["id"]
-                break
-
-            # Отправляем сообщение
-            response = await send_message(access_token, avito_user_id, avito_chat_id, message.text)
-
-            if response:
-                await message.reply("Ваш ответ отправлен.")
-            else:
-                await message.reply("Не удалось отправить ответ.")
+            await message.reply("✅ Ответ успешно отправлен в Avito")
         else:
-            await message.reply("Не удалось получить access token.")
-    else:
-        await message.reply("Пользователь не найден в базе данных.")
+            await message.reply("❌ Ошибка отправки: не удалось отправить сообщение в Avito. Проверьте логи.")
+
+    except Exception as e:
+        await message.reply(f"⛔ Критическая ошибка: {str(e)}")
+        logging.error(f"Error in message reply: {str(e)}")
