@@ -1,11 +1,6 @@
 import logging
 import aiohttp
 from datetime import datetime, timedelta
-from sqlalchemy import select
-from src.models.message_link import MessageLink
-from src.database.db import async_session
-
-from src.models.user import User
 
 # Настройка логирования
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -121,7 +116,8 @@ async def mark_chat_as_read(access_token, user_id, chat_id):
 async def send_message(access_token, avito_user_id, avito_chat_id, message_text):
     url = f"https://api.avito.ru/messenger/v1/accounts/{avito_user_id}/chats/{avito_chat_id}/messages"
     headers = {
-        "Authorization": f"Bearer {access_token}"
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
     }
     data = {
         "message": {
@@ -129,48 +125,25 @@ async def send_message(access_token, avito_user_id, avito_chat_id, message_text)
         },
         "type": "text"
     }
+    
+    logger.debug(f"Отправка сообщения в Avito: URL={url}, headers={headers}, data={data}")
+    
     async with aiohttp.ClientSession() as session:
         try:
             async with session.post(url, headers=headers, json=data) as response:
-                response.raise_for_status()
+                response_body = await response.text()
+                logger.debug(f"Ответ от Avito: Status={response.status}, Body={response_body}")
+                
+                if response.status != 201:
+                    logger.error(f"Ошибка API Avito: {response.status} - {response_body}")
+                    return None
+                
                 return await response.json()
+                
         except Exception as e:
-            logger.error(f"Ошибка при отправке сообщения: {e}")
+            logger.error(f"Ошибка при отправке сообщения: {str(e)}")
             return None
 
-
-async def send_message_to_avito(message_id, reply_text):
-    """
-    Отправляет ответ на сообщение через API Avito.
-    """
-    # Получаем информацию о сообщении, на которое мы отвечаем
-    async with async_session() as session:
-        # Здесь вам нужно будет получить пользователя, чтобы использовать его client_id и client_secret
-        message_link = await session.execute(select(MessageLink).where(MessageLink.telegram_message_id == message_id))
-        message_link = message_link.scalar_one_or_none()
-
-        if message_link:
-            user = await session.get(User, message_link.user_id)
-            if user:
-                # Получаем access_token для отправки сообщения
-                access_token = await get_access_token(user.client_id, user.client_secret)
-                if access_token:
-                    # Здесь вам нужно будет использовать API Avito для отправки ответа
-                    # Используем функцию send_message, передавая необходимые параметры
-                    chat_id = message_link.avito_chat_id
-                    response = await send_message(access_token, user.avito_user_id, chat_id, reply_text)
-
-                    if response:
-                        logger.info("Ответ успешно отправлен в Avito.")
-                    else:
-                        logger.error("Не удалось отправить ответ в Avito.")
-                else:
-                    logger.error("Не удалось получить access token.")
-            else:
-                logger.error("Пользователь не найден в базе данных.")
-        else:
-            logger.error("Связь с сообщением не найдена в базе данных.")
-        
 
 async def get_user_info(access_token, user_id):
     url = f"https://api.avito.ru/core/v1/accounts/{user_id}"

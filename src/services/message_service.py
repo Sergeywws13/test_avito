@@ -3,7 +3,7 @@ from aiogram import Bot
 from sqlalchemy import select
 from src.models.message_link import MessageLink
 from src.models.user import User
-from src.services.avito_api import get_access_token, get_chats, get_messages_from_chat, get_self_info, get_user_info, mark_chat_as_read, send_message
+from src.services.avito_api import get_access_token, get_chats, get_messages_from_chat, get_self_info, mark_chat_as_read, send_message
 from src.database.db import async_session
 from datetime import datetime
 import logging
@@ -98,43 +98,69 @@ async def fetch_and_send_messages(bot: Bot, access_token: str, avito_user_id: st
         raise
 
 
-async def send_message_to_avito(telegram_message_id, reply_text):
+async def send_message_to_avito(telegram_message_id: int, reply_text: str):
+    """Единственная функция для отправки сообщений в Avito"""
     async with async_session() as session:
-        # Step 1: Fetch the MessageLink using telegram_message_id
-        message_link = await session.execute(
-            select(MessageLink).where(MessageLink.telegram_message_id == telegram_message_id)
-        )
-        message_link = message_link.scalar_one_or_none()
+        try:
+            # Шаг 1: Получаем связь сообщения
+            message_link = await session.execute(
+                select(MessageLink).where(
+                    MessageLink.telegram_message_id == telegram_message_id
+                )
+            )
+            message_link = message_link.scalar_one_or_none()
 
-        if not message_link:
-            logger.error(f"Связь с сообщением {telegram_message_id} не найдена в базе данных")
-            return None
+            if not message_link:
+                logger.error(f"MessageLink не найден для ID: {telegram_message_id}")
+                return None
 
-        # Step 2: Fetch the bot's user using message_link.user_id
-        user = await session.get(User, message_link.user_id)
-        if not user:
-            logger.error(f"Пользователь с ID {message_link.user_id} не найден")
-            return None
+            # Шаг 2: Получаем пользователя
+            user = await session.get(User, message_link.user_id)
+            if not user:
+                logger.error(f"Пользователь не найден: ID {message_link.user_id}")
+                return None
 
-        # Step 3: Get the access token and send the message
-        access_token = await get_access_token(user.client_id, user.client_secret)
-        if not access_token:
-            logger.error("Не удалось получить access token")
-            return None
+            # Шаг 3: Получаем токен
+            access_token = await get_access_token(user.client_id, user.client_secret)
+            if not access_token:
+                logger.error("Ошибка получения access_token")
+                return None
 
-        logger.debug(f"Отправка сообщения в чат {message_link.avito_chat_id} от Avito ID {user.avito_user_id}")
-        response = await send_message(
-            access_token=access_token,
-            avito_user_id=user.avito_user_id,  # Bot's Avito ID
-            avito_chat_id=message_link.avito_chat_id,
-            message_text=reply_text
-        )
+            # Шаг 4: Отправляем сообщение
+            logger.debug(
+                f"Отправка в чат {message_link.avito_chat_id}, "
+                f"Avito ID: {user.avito_user_id}, "
+                f"Текст: {reply_text}"
+            )
 
-        if response and "message_id" in response:
-            logger.info("Ответ успешно отправлен в Avito")
-            return response
-        else:
-            logger.error(f"Не удалось отправить сообщение в Avito, ответ: {response}")
+            response = await send_message(
+                access_token=access_token,
+                avito_user_id=user.avito_user_id,
+                avito_chat_id=message_link.avito_chat_id,
+                message_text=reply_text
+            )
+
+            # Шаг 5: Обработка ответа
+            if response and "id" in response:  # Avito возвращает ID в поле "id"
+                # Сохраняем связь ответного сообщения
+                new_link = MessageLink(
+                    telegram_message_id=telegram_message_id,
+                    avito_chat_id=message_link.avito_chat_id,
+                    avito_user_id=user.avito_user_id,
+                    user_id=user.id,
+                    avito_message_id=response["id"]
+                )
+                session.add(new_link)
+                await session.commit()
+
+                logger.info(f"Сообщение отправлено. Ответ Avito: {response}")
+                return response
+            else:
+                logger.error(f"Ошибка API Avito. Ответ: {response}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Ошибка в send_message_to_avito: {str(e)}", exc_info=True)
             return None
 
 
