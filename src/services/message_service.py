@@ -2,11 +2,13 @@ import asyncio
 from aiogram import Bot
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.message_link import MessageLink
 from src.models.user import User
 from src.services.avito_api import get_access_token, get_chats, get_messages_from_chat, get_self_info, mark_chat_as_read, send_message
 from src.database.db import async_session
 from datetime import datetime
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import logging
 
 
@@ -67,7 +69,7 @@ async def fetch_and_send_messages(bot: Bot, access_token: str, avito_user_id: st
                 f"📨 *Новое сообщение от {sender_name}*\n\n"
                 f"💬 Текст: _{message_text}_\n\n"
                 f"🕒 Время: {created_time.strftime('%d.%m.%Y %H:%M')}\n"
-                f"🔗 ID чата: `{chat_id}`"
+                f"👉 Перейдите [по ссылке]({chat['users'][0]['public_user_profile']['url']}) к профилю отправителя"  # Новый формат ссылки
             )
 
             sent_message = await bot.send_message(
@@ -193,4 +195,32 @@ async def periodic_message_check(bot: Bot):
                     await fetch_and_send_messages(bot, access_token, user.avito_user_id, user.telegram_chat_id)
                 else:
                     logger.warning(f"Пропущен пользователь: Telegram ID {user.user_id}, нет avito_user_id или telegram_chat_id")
-        await asyncio.sleep(5)  # Увеличили интервал для тестов
+        await asyncio.sleep(1)  # Увеличили интервал для тестов
+
+
+
+async def delete_old_messages(session: AsyncSession):
+    # Установка ограничения на количество сообщений
+    limit = 10000
+    
+    # Получение старых сообщений
+    old_messages = await session.execute(
+        select(MessageLink).order_by(MessageLink.id.asc()).limit(limit)
+    )
+    
+    # Удаление старых сообщений
+    for message in old_messages.scalars().all():
+        await session.delete(message)
+    
+    # Сохранение изменений
+    await session.commit()
+
+
+async def delete_old_messages_daily():
+    async with async_session() as session:
+        await delete_old_messages(session)
+
+def start_scheduler():
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(delete_old_messages_daily, 'cron', hour=0, minute=0)  # Выполнять раз в день в 00:00
+    scheduler.start()

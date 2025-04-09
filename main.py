@@ -2,7 +2,7 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from config import TELEGRAM_BOT_TOKEN
 import logging
-from src.services.message_service import periodic_message_check
+from src.services.message_service import periodic_message_check, start_scheduler
 from src.database.db import engine
 from src.handlers.register import register_router
 from src.handlers.start import start_router
@@ -25,6 +25,8 @@ async def main():
 
     # Запускаем периодическую проверку сообщений
     asyncio.create_task(periodic_message_check(bot))
+
+    start_scheduler()
 
     await dp.start_polling(bot)
 

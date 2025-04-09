@@ -1,7 +1,5 @@
 from sqlalchemy import Column, Integer, String
-from sqlalchemy.orm import relationship
 from src.models.base import Base
-from src.models.chat import Chat
 
 class User(Base):
     __tablename__ = 'users'
@@ -13,6 +11,5 @@ class User(Base):
     telegram_chat_id = Column(Integer, nullable=True)
     avito_user_id = Column(String, nullable=True)
 
-    chats = relationship("Chat", back_populates="user")
 
     
