@@ -2,6 +2,7 @@ import logging
 import aiohttp
 from datetime import datetime, timedelta
 from sqlalchemy import select
+from src.models.message_link import MessageLink
 from src.database.db import async_session
 
 from src.models.user import User
@@ -145,26 +146,30 @@ async def send_message_to_avito(message_id, reply_text):
     # Получаем информацию о сообщении, на которое мы отвечаем
     async with async_session() as session:
         # Здесь вам нужно будет получить пользователя, чтобы использовать его client_id и client_secret
-        user = await session.execute(select(User).where(User.user_id == message_id))
-        user = user.scalar_one_or_none()
+        message_link = await session.execute(select(MessageLink).where(MessageLink.telegram_message_id == message_id))
+        message_link = message_link.scalar_one_or_none()
 
-        if user:
-            # Получаем access_token для отправки сообщения
-            access_token = await get_access_token(user.client_id, user.client_secret)
-            if access_token:
-                # Здесь вам нужно будет использовать API Avito для отправки ответа
-                # Используем функцию send_message, передавая необходимые параметры
-                chat_id = message_id  # ID чата, на который мы отвечаем
-                response = await send_message(access_token, user.user_id, chat_id, reply_text)
+        if message_link:
+            user = await session.get(User, message_link.user_id)
+            if user:
+                # Получаем access_token для отправки сообщения
+                access_token = await get_access_token(user.client_id, user.client_secret)
+                if access_token:
+                    # Здесь вам нужно будет использовать API Avito для отправки ответа
+                    # Используем функцию send_message, передавая необходимые параметры
+                    chat_id = message_link.avito_chat_id
+                    response = await send_message(access_token, user.avito_user_id, chat_id, reply_text)
 
-                if response:
-                    logger.info("Ответ успешно отправлен в Avito.")
+                    if response:
+                        logger.info("Ответ успешно отправлен в Avito.")
+                    else:
+                        logger.error("Не удалось отправить ответ в Avito.")
                 else:
-                    logger.error("Не удалось отправить ответ в Avito.")
+                    logger.error("Не удалось получить access token.")
             else:
-                logger.error("Не удалось получить access token.")
+                logger.error("Пользователь не найден в базе данных.")
         else:
-            logger.error("Пользователь не найден в базе данных.")
+            logger.error("Связь с сообщением не найдена в базе данных.")
         
 
 async def get_user_info(access_token, user_id):
@@ -178,3 +183,4 @@ async def get_user_info(access_token, user_id):
                 return await response.json()
             else:
                 return None
+            

@@ -100,6 +100,7 @@ async def fetch_and_send_messages(bot: Bot, access_token: str, avito_user_id: st
 
 async def send_message_to_avito(telegram_message_id, reply_text):
     async with async_session() as session:
+        # Step 1: Fetch the MessageLink using telegram_message_id
         message_link = await session.execute(
             select(MessageLink).where(MessageLink.telegram_message_id == telegram_message_id)
         )
@@ -109,22 +110,22 @@ async def send_message_to_avito(telegram_message_id, reply_text):
             logger.error(f"Связь с сообщением {telegram_message_id} не найдена в базе данных")
             return None
 
-        user = await session.execute(select(User).where(User.avito_user_id == message_link.avito_user_id))
-        user = user.scalar_one_or_none()
-
+        # Step 2: Fetch the bot's user using message_link.user_id
+        user = await session.get(User, message_link.user_id)
         if not user:
-            logger.error("Пользователь не найден в базе данных")
+            logger.error(f"Пользователь с ID {message_link.user_id} не найден")
             return None
 
+        # Step 3: Get the access token and send the message
         access_token = await get_access_token(user.client_id, user.client_secret)
         if not access_token:
             logger.error("Не удалось получить access token")
             return None
 
-        logger.debug(f"Отправка сообщения в чат {message_link.avito_chat_id} для Avito ID {message_link.avito_user_id}")
+        logger.debug(f"Отправка сообщения в чат {message_link.avito_chat_id} от Avito ID {user.avito_user_id}")
         response = await send_message(
             access_token=access_token,
-            avito_user_id=message_link.avito_user_id,  # Используем айди клиента
+            avito_user_id=user.avito_user_id,  # Bot's Avito ID
             avito_chat_id=message_link.avito_chat_id,
             message_text=reply_text
         )
@@ -150,4 +151,4 @@ async def periodic_message_check(bot: Bot):
                     await fetch_and_send_messages(bot, access_token, user.avito_user_id, user.telegram_chat_id)
                 else:
                     logger.warning(f"Пропущен пользователь: Telegram ID {user.user_id}, нет avito_user_id или telegram_chat_id")
-        await asyncio.sleep(10)  # Увеличили интервал для тестов
+        await asyncio.sleep(5)  # Увеличили интервал для тестов
