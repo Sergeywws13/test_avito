@@ -1,6 +1,7 @@
 import asyncio
 from aiogram import Bot
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from src.models.message_link import MessageLink
 from src.models.user import User
 from src.services.avito_api import get_access_token, get_chats, get_messages_from_chat, get_self_info, mark_chat_as_read, send_message
@@ -140,28 +141,43 @@ async def send_message_to_avito(telegram_message_id: int, reply_text: str):
                 message_text=reply_text
             )
 
-            # Шаг 5: Обработка ответа
-            if response and "id" in response:  # Avito возвращает ID в поле "id"
-                # Сохраняем связь ответного сообщения
+            # Исправленная проверка ответа
+            if response and isinstance(response, dict) and response.get("id"):
+                # Проверка на существующую запись
+                existing = await session.execute(
+                    select(MessageLink).where(
+                        MessageLink.telegram_message_id == telegram_message_id
+                    )
+                )
+                if existing.scalar():
+                    logger.warning(f"MessageLink {telegram_message_id} уже существует")
+                    return response
+                
                 new_link = MessageLink(
                     telegram_message_id=telegram_message_id,
                     avito_chat_id=message_link.avito_chat_id,
-                    avito_user_id=user.avito_user_id,
+                    avito_user_id=str(user.avito_user_id),  # Приведение к строке
                     user_id=user.id,
                     avito_message_id=response["id"]
                 )
                 session.add(new_link)
-                await session.commit()
+                
+                try:
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    logger.warning("Обнаружен дубликат, откат транзакции")
+                    return response
 
-                logger.info(f"Сообщение отправлено. Ответ Avito: {response}")
+                logger.info(f"Успешно сохранено: {response['id']}")
                 return response
-            else:
-                logger.error(f"Ошибка API Avito. Ответ: {response}")
-                return None
+            
+            logger.error(f"Некорректный ответ: {response}")
+            return None
 
         except Exception as e:
-            logger.error(f"Ошибка в send_message_to_avito: {str(e)}", exc_info=True)
-            return None
+            logger.error(f"Ошибка: {str(e)}", exc_info=True)
+            return None            
 
 
 async def periodic_message_check(bot: Bot):

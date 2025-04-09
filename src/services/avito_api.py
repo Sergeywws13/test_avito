@@ -126,22 +126,23 @@ async def send_message(access_token, avito_user_id, avito_chat_id, message_text)
         "type": "text"
     }
     
-    logger.debug(f"Отправка сообщения в Avito: URL={url}, headers={headers}, data={data}")
+    logger.info(f"Отправка сообщения в Avito: {message_text[:50]}...")  # Логируем начало
     
     async with aiohttp.ClientSession() as session:
         try:
             async with session.post(url, headers=headers, json=data) as response:
                 response_body = await response.text()
-                logger.debug(f"Ответ от Avito: Status={response.status}, Body={response_body}")
+                logger.debug(f"Ответ Avito: {response.status} {response_body}")
                 
-                if response.status != 201:
-                    logger.error(f"Ошибка API Avito: {response.status} - {response_body}")
+                # Исправленная проверка статуса
+                if response.status != 200:
+                    logger.error(f"Ошибка API: {response.status}")
                     return None
                 
                 return await response.json()
                 
         except Exception as e:
-            logger.error(f"Ошибка при отправке сообщения: {str(e)}")
+            logger.error(f"Ошибка отправки: {str(e)}")
             return None
 
 

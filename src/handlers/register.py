@@ -47,7 +47,10 @@ async def process_client_secret(message: Message, state: FSMContext):
     client_secret = message.text
 
     async with async_session() as session:
+        # Получаем или создаем пользователя
         user = await get_or_create_user(session, message.from_user.id, client_id, client_secret)
+        
+        # Получаем токен доступа
         access_token = await get_access_token(client_id, client_secret)
         if access_token:
             self_info = await get_self_info(access_token)
@@ -60,7 +63,14 @@ async def process_client_secret(message: Message, state: FSMContext):
         else:
             await message.answer("❌ Не удалось получить токен доступа")
             return
+        
+        # Сохраняем данные пользователя
         user.telegram_chat_id = message.chat.id
+        
+        # Очистка кэша при изменении учетных данных
+        global access_token_cache
+        access_token_cache = {}
+        
         await session.commit()
 
     await message.answer("✅ Данные успешно сохранены!")

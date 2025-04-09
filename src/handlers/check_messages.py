@@ -27,21 +27,26 @@ async def handle_incoming_reply(message: types.Message):
     reply_text = message.text
 
     try:
-        # Отправляем сообщение в Avito и получаем ответ
         response = await send_message_to_avito(reply_to_message_id, reply_text)
-        logging.info(f"Ответ от Avito: {response}")
-
-        # Проверяем, что ответ не пустой и содержит ожидаемые данные
-        if response and isinstance(response, dict) and "message_id" in response:
-            await save_message_link(reply_to_message_id, message.message_id, response['message_id'])
-            await message.reply("✅ Ответ успешно отправлен в Avito")
+        
+        # Исправленная проверка ответа
+        if response and isinstance(response, dict):
+            if "id" in response:
+                await message.reply("✅ Ответ успешно отправлен в Avito")
+                logging.info(f"Успешный ответ: {response['id']}")
+            else:
+                error_msg = response.get("error", "Неизвестная ошибка")
+                await message.reply(f"❌ Ошибка Avito: {error_msg}")
+                logging.error(f"Ошибка API: {error_msg}")
         else:
-            logging.error(f"Ошибка в ответе от Avito: {response}")
-            await message.reply("❌ Ошибка отправки: не удалось отправить сообщение в Avito. Проверьте логи.")
+            await message.reply("❌ Не удалось отправить сообщение")
+            logging.error("Пустой ответ от API")
+            
     except Exception as e:
-        await message.reply(f"⛔ Критическая ошибка: {str(e)}")
-        logging.error(f"Ошибка отправки: {str(e)}")
+        await message.reply(f"⛔ Ошибка: {str(e)}")
+        logging.error(f"Критическая ошибка: {str(e)}")
 
+        
 async def save_message_link(reply_to_message_id, telegram_message_id, avito_message_id):
     async with async_session() as session:
         # Получаем связь с сообщением
