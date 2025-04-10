@@ -235,5 +235,5 @@ async def delete_old_messages_daily():
 
 def start_scheduler():
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(delete_old_messages_daily, 'cron', day='*/2')
+    scheduler.add_job(delete_old_messages_daily, 'cron', day='*/3', hour=0, minute=0, second=0)
     scheduler.start()
