@@ -16,7 +16,8 @@ async def handle_incoming_message(message: types.Message):
     if message.reply_to_message:
         await handle_incoming_reply(message)
     else:
-        await message.answer("Пожалуйста, ответьте на это сообщение.")
+        await message.answer("Неизвестная команда, испотльзуйте команду /info, чтобы ознакомиться с функционалом!\n" \
+        "Чтобы ответить на сообщение, выберите пользователя и с помощью ответа телеграма ответьте на него!")
 
 async def handle_incoming_reply(message: types.Message):
     if not message.reply_to_message:
