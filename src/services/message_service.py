@@ -211,16 +211,29 @@ async def delete_old_messages(session: AsyncSession):
     # Удаление старых сообщений
     for message in old_messages.scalars().all():
         await session.delete(message)
+        print(f"Удалено сообщение с ID {message.id}")
     
     # Сохранение изменений
     await session.commit()
+
+    # Проверка содержимого базы данных после удаления сообщений
+    messages_after_deletion = await session.execute(
+        select(MessageLink).order_by(MessageLink.id.asc())
+    )
+    
+    # Проверка, что записи, которые должны быть удалены, действительно отсутствуют в таблице
+    if messages_after_deletion.scalars().all():
+        print("Сообщения не были удалены")
+    else:
+        print("Сообщения были удалены успешно")
 
 
 async def delete_old_messages_daily():
     async with async_session() as session:
         await delete_old_messages(session)
+        print(f"Удалены старые сообщения {datetime.now()}")
 
 def start_scheduler():
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(delete_old_messages_daily, 'cron', hour=0, minute=0)  # Выполнять раз в день в 00:00
+    scheduler.add_job(delete_old_messages_daily, 'cron', day='*/2')
     scheduler.start()
